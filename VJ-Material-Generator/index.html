@@ -1,0 +1,656 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VJ素材ジェネレーター Ver.1.5</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101014;color:#f4f4f7;font:15px system-ui,-apple-system,sans-serif}
+main{max-width:1440px;margin:auto;padding:24px}
+h1{font-size:26px;margin:0 0 8px}
+h2{font-size:18px;margin:0 0 15px}
+p,.hint{color:#aeb0ba}
+.hint{font-size:12px;line-height:1.6;margin:7px 0}
+.layout{display:grid;grid-template-columns:390px minmax(0,1fr);gap:20px}
+.panel{background:#1c1c23;border:1px solid #363640;border-radius:14px;padding:18px;min-width:0}
+label{display:block;color:#c5c5cf;font-size:13px;margin:12px 0 5px}
+input,select{width:100%;padding:10px;border:1px solid #484854;border-radius:8px;background:#101016;color:white;font:inherit}
+input[type=color]{height:43px;padding:3px}
+input[type=file]{font-size:12px}
+input[type=checkbox]{width:auto}
+input[type=range]{padding:0;border:0;background:transparent;accent-color:#398ef5;cursor:pointer}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0}
+button{padding:11px 14px;border:0;border-radius:8px;background:#353541;color:white;font-weight:700;cursor:pointer}
+button.primary{background:#287fe9}
+button.danger{background:#a53245}
+button:disabled{opacity:.5;cursor:wait}
+.track{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end;border:1px solid #42424b;padding:10px;border-radius:9px;margin:0 0 10px}
+.track label{margin-top:0}
+.track input{min-width:0}
+.track.active{border-color:#56a4ff;background:#202936}
+.track .pick{grid-column:1/-1;text-align:left}
+.track .pick.active{color:#81baff}
+.track .custom-wrap{grid-column:1/-1}
+.check{display:flex;align-items:center;gap:8px}
+.check label{margin:8px 0}
+.slider-box{margin:13px 0;padding:13px;background:#15151c;border:1px solid #393944;border-radius:10px}
+.slider-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.slider-heading label{margin:0}
+.slider-heading strong{color:#87bdff}
+.slider-box input{margin-top:14px}
+.limits{display:flex;justify-content:space-between;color:#999;font-size:11px}
+#preview{width:100%;height:auto;display:block;background:black;border:1px solid #38383f;border-radius:10px}
+#status{min-height:23px;color:#8ac4ff;overflow-wrap:anywhere}
+[hidden]{display:none!important}
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr}
+  .track{grid-template-columns:60px minmax(0,1fr)}
+  .track .delete{grid-column:2;justify-self:end}
+}
+</style>
+</head>
+<body>
+<main>
+<h1>VJ素材ジェネレーター Ver.1.5</h1>
+<p>アルバムのジャケットと曲情報からVJ用JPEGを一括生成</p>
+<div class="layout">
+<section class="panel">
+<h2>共通設定</h2>
+<label for="cover">ジャケット画像</label>
+<input id="cover" type="file" accept="image/*,.heic,.heif,.tif,.tiff">
+<div class="hint">JPEG / PNG / WebPなど。HEICはブラウザによって対応が異なります。</div>
+<label for="album">アルバム名</label>
+<input id="album" placeholder="アルバム名">
+<label for="bgMode">背景モード</label>
+<select id="bgMode">
+  <option value="solid">単色背景</option>
+  <option value="jacket">ジャケット背景</option>
+</select>
+<div id="jacketSettings" hidden>
+  <div class="slider-box">
+    <div class="slider-heading">
+      <label for="blurAmount">ジャケット背景のぼかし</label>
+      <strong id="blurValue">30 / 100</strong>
+    </div>
+    <input id="blurAmount" type="range" min="0" max="100" step="1" value="30">
+    <div class="limits">
+      <span>0：くっきり</span>
+      <span>100：輪郭が分からないほどぼかす</span>
+    </div>
+  </div>
+  <div class="slider-box">
+    <div class="slider-heading">
+      <label for="darkness">背景の暗さ</label>
+      <strong id="darkValue">38%</strong>
+    </div>
+    <input id="darkness" type="range" min="0" max="85" step="1" value="38">
+    <div class="limits">
+      <span>0：暗くしない</span>
+      <span>85：かなり暗い</span>
+    </div>
+  </div>
+  <div class="hint">ぼかすのは背景だけ。手前のジャケットは鮮明なままです。</div>
+</div>
+<div class="pair">
+  <div>
+    <label for="bg">単色背景の色</label>
+    <input id="bg" type="color" value="#000000">
+  </div>
+  <div>
+    <label for="fg">文字色</label>
+    <input id="fg" type="color" value="#ffffff">
+  </div>
+</div>
+<div class="pair">
+  <div>
+    <label for="font">フォント</label>
+    <select id="font">
+      <option value="sans-serif">ゴシック</option>
+      <option value="serif">明朝</option>
+      <option value="Arial, sans-serif">Arial</option>
+      <option value="monospace">等幅</option>
+    </select>
+  </div>
+  <div>
+    <label for="size">出力サイズ</label>
+    <select id="size">
+      <option value="1920x1080">1920×1080</option>
+      <option value="1280x720">1280×720</option>
+      <option value="1080x1080">1080×1080</option>
+    </select>
+  </div>
+</div>
+<div class="check">
+  <input id="useQr" type="checkbox">
+  <label for="useQr">QRコードを表示（任意）</label>
+</div>
+<div id="qrSettings" hidden>
+  <label for="qrUrl">QRコードのURL</label>
+  <input id="qrUrl" type="url" placeholder="https://example.com">
+</div>
+<label for="pattern">JPEGファイル名テンプレート</label>
+<input id="pattern" value="【{title}】【{artist}】【{album}】">
+<div class="hint">{track} / {title} / {artist} / {album} を使用できます。</div>
+<label for="zipName">ZIPファイル名</label>
+<input id="zipName" value="{album}_VJ素材">
+<div class="actions">
+  <button id="reset" class="danger">すべてリセット</button>
+</div>
+<div id="status" aria-live="polite"></div>
+</section>
+<section class="panel">
+<h2>曲一覧</h2>
+<div id="tracks"></div>
+<div class="actions">
+  <button id="add">＋ 曲を追加</button>
+  <button id="one">選択曲をJPEG保存</button>
+  <button id="all" class="primary">全曲をZIP保存</button>
+</div>
+<h2>プレビュー</h2>
+<canvas id="preview" width="1920" height="1080"></canvas>
+<div class="hint">曲ごとの「この曲をプレビュー」で切り替えられます。</div>
+</section>
+</div>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const rows=[];
+let coverImage=null,selectedId=0,nextId=1,loadToken=0,previewVersion=0,exporting=false;
+const status=msg=>{$('status').textContent=msg;};
+const safe=s=>String(s||'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').trim().slice(0,180)||'無題';
+
+function addTrack(){
+  const id=nextId++,row=document.createElement('div');
+  row.className='track';
+  row.innerHTML=`
+    <div><label>番号</label><input class="number" type="number" min="1"></div>
+    <div><label>曲名</label><input class="title" placeholder="曲名"></div>
+    <div><label>アーティスト</label><input class="artist" placeholder="アーティスト"></div>
+    <button class="delete danger" type="button">×</button>
+    <button class="pick" type="button">この曲をプレビュー</button>
+    <div class="custom-wrap">
+      <label>個別ファイル名（任意）</label>
+      <input class="custom" placeholder="空欄なら共通テンプレート">
+    </div>`;
+  $('tracks').appendChild(row);
+  row.querySelector('.number').value=rows.length+1;
+  rows.push({id,row});
+  if(!selectedId)selectedId=id;
+  row.querySelector('.pick').onclick=()=>{
+    selectedId=id;
+    refresh();
+  };
+  row.querySelector('.delete').onclick=()=>{
+    const i=rows.findIndex(r=>r.id===id);
+    if(i>=0)rows.splice(i,1);
+    row.remove();
+    if(selectedId===id)selectedId=rows[0]?.id||0;
+    refresh();
+  };
+  row.querySelectorAll('input').forEach(el=>el.addEventListener('input',refresh));
+  refresh();
+}
+function trackData(item){
+  const get=name=>item.row.querySelector('.'+name).value.trim();
+  return {
+    track:get('number'),
+    title:get('title'),
+    artist:get('artist'),
+    custom:get('custom')
+  };
+}
+function expand(pattern,t){
+  return String(pattern).replace(/\{(track|title|artist|album)\}/g,
+    (_,key)=>key==='album'?$('album').value.trim():(t[key]||''));
+}
+function filename(t){
+  return safe(expand(t.custom||$('pattern').value,t))+'.jpg';
+}
+
+// 背景画像は縦横比を維持したまま画面いっぱいに表示
+function coverDraw(ctx,img,x,y,w,h){
+  const scale=Math.max(w/img.width,h/img.height);
+  const dw=img.width*scale,dh=img.height*scale;
+  ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+}
+
+// 手前のジャケット画像は切り抜かず全体を表示
+function containDraw(ctx,img,x,y,w,h){
+  const scale=Math.min(w/img.width,h/img.height);
+  const dw=img.width*scale,dh=img.height*scale;
+  ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+}
+
+// 背景ぼかし処理
+// 縮小・再拡大で細部を失わせ、さらにGaussian blurを適用
+function drawBackground(ctx,w,h){
+  ctx.fillStyle=$('bg').value;
+  ctx.fillRect(0,0,w,h);
+
+  if($('bgMode').value!=='jacket'||!coverImage)return;
+
+  const strength=Number($('blurAmount').value);
+
+  if(strength===0){
+    // 0のときは一切ぼかさない
+    coverDraw(ctx,coverImage,0,0,w,h);
+  }else{
+    // 値が大きいほど解像度を落として細部を消す
+    const reduction=1+strength*0.35;
+    const sw=Math.max(32,Math.round(w/reduction));
+    const sh=Math.max(18,Math.round(h/reduction));
+
+    const small=document.createElement('canvas');
+    small.width=sw;
+    small.height=sh;
+
+    coverDraw(small.getContext('2d'),coverImage,0,0,sw,sh);
+
+    ctx.save();
+    ctx.imageSmoothingEnabled=true;
+    ctx.imageSmoothingQuality='high';
+
+    // Gaussian blur。最大110px相当
+    const blurPx=strength*1.1*(w/1920);
+    ctx.filter=`blur(${blurPx}px)`;
+
+    // ぼかした画像の端が透けにくいよう余分に描画
+    const bleed=blurPx*3;
+    ctx.drawImage(small,-bleed,-bleed,w+bleed*2,h+bleed*2);
+
+    ctx.restore();
+  }
+
+  // 背景の暗さはぼかし処理と独立して調整
+  const darkness=Number($('darkness').value)/100;
+  if(darkness>0){
+    ctx.fillStyle=`rgba(0,0,0,${darkness})`;
+    ctx.fillRect(0,0,w,h);
+  }
+}
+
+// 文字折り返し
+function splitLines(ctx,text,width){
+  const lines=[''];
+  for(const c of String(text||' ')){
+    const i=lines.length-1;
+    if(lines[i]&&ctx.measureText(lines[i]+c).width>width){
+      lines.push(c);
+    }else{
+      lines[i]+=c;
+    }
+  }
+  return lines;
+}
+function fitted(ctx,value,width,baseSize){
+  let lines=[],size=Math.round(baseSize);
+  while(size>=16){
+    ctx.font=`600 ${size}px ${$('font').value}`;
+    lines=splitLines(ctx,value,width);
+    if(lines.length<=2)return {size,lines};
+    size-=2;
+  }
+  return {size:16,lines:lines.slice(0,2)};
+}
+function labeled(ctx,label,value,x,y,width,valueSize,labelSize,color){
+  ctx.save();
+  ctx.textAlign='left';
+  ctx.textBaseline='top';
+  ctx.fillStyle=color;
+
+  ctx.globalAlpha=.8;
+  ctx.font=`500 ${labelSize}px ${$('font').value}`;
+  ctx.fillText(label,x,y);
+  ctx.globalAlpha=1;
+
+  const gap=labelSize*1.65;
+  const fit=fitted(ctx,value,width,valueSize);
+  const lh=fit.size*1.3;
+
+  ctx.font=`600 ${fit.size}px ${$('font').value}`;
+  fit.lines.forEach((line,i)=>ctx.fillText(line,x,y+gap+i*lh));
+
+  ctx.restore();
+  return gap+fit.lines.length*lh;
+}
+
+// QRコード
+async function qrImage(url,size){
+  if(!window.QRCode){
+    throw Error('QRコード用ライブラリを読み込めません。');
+  }
+  const holder=document.createElement('div');
+  holder.style.cssText='position:absolute;left:-10000px;top:-10000px';
+  document.body.appendChild(holder);
+
+  try{
+    new QRCode(holder,{
+      text:url,
+      width:size,
+      height:size,
+      colorDark:'#000000',
+      colorLight:'#ffffff',
+      correctLevel:QRCode.CorrectLevel.M
+    });
+
+    const source=holder.querySelector('canvas');
+    if(source){
+      const c=document.createElement('canvas');
+      c.width=size;
+      c.height=size;
+      c.getContext('2d').drawImage(source,0,0);
+      return c;
+    }
+
+    const img=holder.querySelector('img');
+    if(img){
+      await img.decode();
+      return img;
+    }
+
+    throw Error('QRコード生成に失敗しました。');
+  }finally{
+    holder.remove();
+  }
+}
+
+// JPEG用の画像を描画
+async function render(t,canvas){
+  const [w,h]=$('size').value.split('x').map(Number);
+  canvas.width=w;
+  canvas.height=h;
+
+  const ctx=canvas.getContext('2d');
+  drawBackground(ctx,w,h);
+
+  const pad=w*.045;
+  const square=w===h;
+  const coverSize=Math.min(h*.76,square?w*.62:w*.40);
+  const cx=pad,cy=(h-coverSize)/2;
+
+  if(coverImage){
+    containDraw(ctx,coverImage,cx,cy,coverSize,coverSize);
+  }else{
+    ctx.fillStyle='#272731';
+    ctx.fillRect(cx,cy,coverSize,coverSize);
+    ctx.fillStyle='#999';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.font=`${h*.035}px sans-serif`;
+    ctx.fillText('NO JACKET',cx+coverSize/2,cy+coverSize/2);
+  }
+
+  const tx=cx+coverSize+w*.035;
+  const tw=w-tx-pad;
+  const fg=$('fg').value;
+  const valueSize=h*.051;
+  const labelSize=h*.023;
+  const gap=h*.045;
+
+  let y=h*.19;
+
+  y+=labeled(
+    ctx,'Song',t.title||'曲名',
+    tx,y,tw,valueSize,labelSize,fg
+  )+gap;
+
+  y+=labeled(
+    ctx,'Artist',t.artist||'アーティスト',
+    tx,y,tw,valueSize,labelSize,fg
+  )+gap;
+
+  y+=labeled(
+    ctx,'Album',$('album').value.trim()||'アルバム名',
+    tx,y,tw,valueSize,labelSize,fg
+  );
+
+  if($('useQr').checked&&$('qrUrl').value.trim()){
+    const q=Math.round(h*.15);
+    const qr=await qrImage($('qrUrl').value.trim(),q);
+    const qx=w-pad-q-18,qy=h-pad-q-18;
+
+    ctx.fillStyle='#fff';
+    ctx.fillRect(qx-12,qy-12,q+24,q+24);
+    ctx.drawImage(qr,qx,qy,q,q);
+  }
+}
+
+// 選択曲のプレビュー
+async function refresh(){
+  const version=++previewVersion;
+
+  rows.forEach(item=>{
+    const active=item.id===selectedId;
+    item.row.classList.toggle('active',active);
+    item.row.querySelector('.pick').classList.toggle('active',active);
+  });
+
+  const item=rows.find(r=>r.id===selectedId)||rows[0];
+  if(!item)return;
+
+  const temp=document.createElement('canvas');
+
+  try{
+    await render(trackData(item),temp);
+    if(version!==previewVersion)return;
+
+    const canvas=$('preview');
+    canvas.width=temp.width;
+    canvas.height=temp.height;
+    canvas.getContext('2d').drawImage(temp,0,0);
+  }catch(e){
+    if(version===previewVersion){
+      status('プレビューエラー：'+e.message);
+    }
+  }
+}
+
+// 保存処理
+function download(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+
+  a.href=url;
+  a.download=name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+function jpeg(canvas){
+  return new Promise((resolve,reject)=>{
+    canvas.toBlob(blob=>{
+      if(blob)resolve(blob);
+      else reject(Error('JPEG変換に失敗しました'));
+    },'image/jpeg',.95);
+  });
+}
+async function createJpeg(t){
+  const c=document.createElement('canvas');
+  await render(t,c);
+  return jpeg(c);
+}
+async function exportFiles(all){
+  if(exporting)return;
+
+  const tracks=rows.map(trackData).filter(t=>t.title);
+  if(!tracks.length){
+    alert('曲名を1つ以上入力してください。');
+    return;
+  }
+
+  exporting=true;
+  const buttons=[$('one'),$('all'),$('reset'),$('add')];
+  buttons.forEach(b=>b.disabled=true);
+
+  try{
+    if(!all){
+      const item=rows.find(r=>r.id===selectedId);
+      if(!item||!trackData(item).title){
+        throw Error('選択した曲の曲名を入力してください。');
+      }
+
+      const t=trackData(item);
+      download(await createJpeg(t),filename(t));
+      status('JPEGを保存しました。');
+
+    }else{
+      if(!window.JSZip){
+        throw Error('ZIP用ライブラリを読み込めません。');
+      }
+
+      const zip=new JSZip();
+      const names=new Set();
+
+      for(let i=0;i<tracks.length;i++){
+        const t=tracks[i];
+        status(`${i+1} / ${tracks.length} 曲目を生成中…`);
+
+        const original=filename(t);
+        let name=original,num=2;
+
+        while(names.has(name)){
+          name=original.replace(/\.jpg$/i,`_${num++}.jpg`);
+        }
+
+        names.add(name);
+        zip.file(name,await createJpeg(t));
+      }
+
+      status('ZIPファイルを圧縮中…');
+      const blob=await zip.generateAsync({type:'blob'});
+
+      download(
+        blob,
+        safe(expand($('zipName').value,tracks[0]))+'.zip'
+      );
+
+      status(`${tracks.length}曲をZIPで保存しました。`);
+    }
+  }catch(e){
+    status('エラー：'+e.message);
+    alert(e.message);
+  }finally{
+    exporting=false;
+    buttons.forEach(b=>b.disabled=false);
+  }
+}
+
+// 入力イベント
+function updateSliderLabels(){
+  $('blurValue').textContent=$('blurAmount').value+' / 100';
+  $('darkValue').textContent=$('darkness').value+'%';
+}
+
+$('cover').addEventListener('change',e=>{
+  const file=e.target.files[0];
+  const token=++loadToken;
+
+  if(!file){
+    coverImage=null;
+    refresh();
+    return;
+  }
+
+  const url=URL.createObjectURL(file);
+  const img=new Image();
+
+  img.onload=()=>{
+    if(token===loadToken){
+      coverImage=img;
+      status('ジャケット画像を読み込みました。');
+      refresh();
+    }
+    URL.revokeObjectURL(url);
+  };
+
+  img.onerror=()=>{
+    if(token===loadToken){
+      status('画像が読み込めません。JPEGまたはPNGを試してください。');
+    }
+    URL.revokeObjectURL(url);
+  };
+
+  img.src=url;
+});
+
+$('bgMode').addEventListener('change',()=>{
+  $('jacketSettings').hidden=$('bgMode').value!=='jacket';
+  refresh();
+});
+
+['blurAmount','darkness'].forEach(id=>{
+  $(id).addEventListener('input',()=>{
+    updateSliderLabels();
+    refresh();
+  });
+});
+
+$('useQr').addEventListener('change',()=>{
+  $('qrSettings').hidden=!$('useQr').checked;
+  refresh();
+});
+
+[
+  'album','bg','fg','font','size',
+  'qrUrl','pattern','zipName'
+].forEach(id=>{
+  $(id).addEventListener('input',refresh);
+});
+
+$('add').onclick=()=>addTrack();
+$('one').onclick=()=>exportFiles(false);
+$('all').onclick=()=>exportFiles(true);
+
+// 全リセット
+$('reset').onclick=()=>{
+  if(!confirm(
+    'ジャケット・アルバム・曲一覧・設定をすべてリセットしますか？'
+  ))return;
+
+  loadToken++;
+  previewVersion++;
+  coverImage=null;
+
+  $('cover').value='';
+  $('album').value='';
+  $('bgMode').value='solid';
+  $('bg').value='#000000';
+  $('fg').value='#ffffff';
+  $('font').value='sans-serif';
+  $('size').value='1920x1080';
+
+  $('blurAmount').value='30';
+  $('darkness').value='38';
+  updateSliderLabels();
+  $('jacketSettings').hidden=true;
+
+  $('useQr').checked=false;
+  $('qrSettings').hidden=true;
+  $('qrUrl').value='';
+
+  $('pattern').value='【{title}】【{artist}】【{album}】';
+  $('zipName').value='{album}_VJ素材';
+
+  $('tracks').replaceChildren();
+  rows.length=0;
+  selectedId=0;
+  nextId=1;
+
+  addTrack();
+  status('リセットしました。');
+};
+
+// 初期化
+updateSliderLabels();
+addTrack();
+</script>
+</body>
+</html>
